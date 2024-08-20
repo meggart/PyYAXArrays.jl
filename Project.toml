@@ -3,6 +3,12 @@ uuid = "a3bebb63-7b3d-412a-a2c3-cb39e498b6da"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de> and contributors"]
 version = "1.0.0-DEV"
 
+[deps]
+CondaPkg = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
+DiskArrays = "3c3547ce-8d99-4f5e-a174-61eb10b00ae3"
+PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+YAXArrayBase = "90b8fcef-0c2d-428d-9c56-5f86629e9d14"
+
 [compat]
 julia = "1.9"
 

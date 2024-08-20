@@ -1,0 +1,4 @@
+[deps]
+dask = ""
+xarray = ""
+zarr = ""
