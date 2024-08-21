@@ -2,3 +2,5 @@
 dask = ""
 xarray = ""
 zarr = ""
+aiohttp = ""
+requests = ""
