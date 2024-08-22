@@ -57,7 +57,7 @@ for (lang, array) in [("Julia", yax_array["v"]), ("Python", py_array["v"])]
 end
 
 function medium_read(array)
-    collect(array[1:1000, 1:1000, 1:15]) # TODO: does this count as chunking?
+    collect(array[:, :, 1:15]) # TODO: does this count as chunking?
 end
 
 SUITE["medium read"]["Julia"] = @benchmark medium_read($(yax_array["v"])) seconds=10
@@ -67,8 +67,8 @@ function some_friendly_computation(array)
     mapslices(mean, array, dims="Ti")
 end
 
-SUITE["medium computation"]["Julia"] = @benchmark some_friendly_computation($(yax_array["v"][1:1000, 1:1000, 1:15])) seconds=10
-SUITE["medium computation"]["Python"] = @benchmark some_friendly_computation($(py_array["v"][1:1000, 1:1000, 1:15])) seconds=10
+SUITE["medium computation"]["Julia"] = @benchmark some_friendly_computation($(yax_array["v"][1:50, 1:50, :])) seconds=10
+SUITE["medium computation"]["Python"] = @benchmark some_friendly_computation($(py_array["v"][1:50, 1:50, :])) seconds=10
 
 function timeseries_access(array)
     mapslices(mean, array, dims="Ti")
