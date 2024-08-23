@@ -1,11 +1,10 @@
-using BenchmarkTools, Chairmarks, CairoMakie, SwarmMakie, Statistics, DiskArrays # benchmarking and plotting
-
 # WARNING: Python must always be loaded before Julia, because it breaks if Julia's OpenSSL
 # is loaded first.  There is not a good way to fix this, so we just have to live with it.
 using PythonCall # for Python testing
-
 using PyYAXArrays # Xarrays wrapped in Julia 🏴‍☠️
 const xr = PyYAXArrays.xr[] # this is a reference to the xarray module in Python
+
+using BenchmarkTools, Chairmarks, CairoMakie, SwarmMakie, Statistics, DiskArrays # benchmarking and plotting
 
 using YAXArrays, Zarr # the Julia end of the spectrum
 
