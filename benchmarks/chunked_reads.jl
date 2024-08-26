@@ -32,8 +32,8 @@ function benchmark_single_chunk_read(A)
     @benchmark DiskArrays.readblock!(parent($A #=A must be a YAXArray for this to work=#), $aout, $(chunk_idxs)...)
 end
 
-SUITE["single chunk read"]["Julia"] = benchmark_single_chunk_read(yax_array["v"])
-SUITE["single chunk read"]["Python"] = benchmark_single_chunk_read(py_array["v"])
+SUITE["single chunk read"]["YAXArrays"] = benchmark_single_chunk_read(yax_array["v"])
+SUITE["single chunk read"]["PyYAXArrays"] = benchmark_single_chunk_read(py_array["v"])
 
 # Load 100 contiguous chunks.  For the MUR SST data, we'll do this by loading 
 
@@ -41,7 +41,7 @@ function load_spatial_contiguous_chunks!(array, out)
     out .= array[:, :, 1]
 end
 
-for (lang, array) in [("Julia", yax_array["v"]), ("Python", py_array["v"])]
+for (lang, array) in [("YAXArrays", yax_array["v"]), ("PyYAXArrays", py_array["v"])]
     out = zeros(Union{Missing, Float64}, size(array, 1), size(array, 2))
     SUITE["hundred chunk read contiguous"]["$lang"] = @benchmark load_spatial_contiguous_chunks!($(array), $(out)) seconds=10
 end
@@ -50,7 +50,7 @@ function random_access(array)
     array[rand(1:size(array, 1), 1000), rand(1:size(array, 2), 1000), rand(1:size(array, 3), 1000)]
 end
 
-for (lang, array) in [("Julia", yax_array["v"]), ("Python", py_array["v"])]
+for (lang, array) in [("YAXArrays", yax_array["v"]), ("PyYAXArrays", py_array["v"])]
     out = zeros(Union{Missing, Float64}, size(array, 1), size(array, 2))
     SUITE["random access"]["$lang"] = @benchmark random_access($(array)) seconds=10
 end
@@ -59,20 +59,20 @@ function medium_read(array)
     collect(array[:, :, 1:15]) # TODO: does this count as chunking?
 end
 
-SUITE["medium read"]["Julia"] = @benchmark medium_read($(yax_array["v"])) seconds=10
-SUITE["medium read"]["Python"] = @benchmark medium_read($(py_array["v"])) seconds=10
+SUITE["medium read"]["YAXArrays"] = @benchmark medium_read($(yax_array["v"])) seconds=10
+SUITE["medium read"]["PyYAXArrays"] = @benchmark medium_read($(py_array["v"])) seconds=10
 
 function some_friendly_computation(array)
     mapslices(mean, array, dims="Ti")
 end
 
-SUITE["medium computation"]["Julia"] = @benchmark some_friendly_computation($(yax_array["v"][1:50, 1:50, :])) seconds=10
-SUITE["medium computation"]["Python"] = @benchmark some_friendly_computation($(py_array["v"][1:50, 1:50, :])) seconds=10
+SUITE["medium computation"]["YAXArrays"] = @benchmark some_friendly_computation($(yax_array["v"][1:50, 1:50, :])) seconds=10
+SUITE["medium computation"]["PyYAXArrays"] = @benchmark some_friendly_computation($(py_array["v"][1:50, 1:50, :])) seconds=10
 
 function timeseries_access(array)
     mapslices(mean, array, dims="Ti")
 end
 
-SUITE["timeseries access"]["Python"] = @benchmark timeseries_access($(yax_array["v"])) seconds=20
-SUITE["timeseries access"]["Julia"] = @benchmark timeseries_access($(py_array["v"])) seconds=20
+SUITE["timeseries access"]["PyYAXArrays"] = @benchmark timeseries_access($(yax_array["v"])) seconds=20
+SUITE["timeseries access"]["YAXArrays"] = @benchmark timeseries_access($(py_array["v"])) seconds=20
 
