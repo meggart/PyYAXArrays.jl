@@ -4,9 +4,12 @@ using PythonCall # for Python testing
 using PyYAXArrays # Xarrays wrapped in Julia 🏴‍☠️
 using FSSpec # fsspec wrapped in Julia 🤯
 const xr = PyYAXArrays.xr[] # this is a reference to the xarray module in Python
+const np = PythonCall.pyimport("numpy")
 
-using BenchmarkTools, Chairmarks, CairoMakie, SwarmMakie, Statistics, DiskArrays # benchmarking and plotting
+using BenchmarkTools, Chairmarks, CairoMakie, SwarmMakie, Statistics, DiskArrays, JSON3 # benchmarking and plotting
 #using ProfileView#, Cthulhu # profile and figure out where type instability happens
+
+include(joinpath(@__DIR__, "cairomakie_patch.jl")) # patch CairoMakie to allow markers with specified fonts
 
 using YAXArrays, Zarr # the Julia end of the spectrum
 
@@ -18,11 +21,17 @@ const SUITE = BenchmarkGroup() # instantiate a toplevel benchmark group which al
 data_url = "https://its-live-data.s3-us-west-2.amazonaws.com/datacubes/v2/N00E020/ITS_LIVE_vel_EPSG32735_G0120_X750000_Y10050000.zarr"
 # data_url = "s3://its-live-data/datacubes/v2/N00E020/ITS_LIVE_vel_EPSG32735_G0120_X750000_Y10050000.zarr"
 
-yax_array = YAXArrays.open_dataset(Zarr.zopen(data_url, consolidated = true))
+const ARRAYS = Dict{String, Any}()
 
-py_array = YAXArrays.open_dataset(xr.open_zarr(data_url, decode_times=false))
+yax_array = ARRAYS["YAXArrays"] = YAXArrays.open_dataset(Zarr.zopen(data_url, consolidated = true))
 
-fs_array = YAXArrays.open_dataset(Zarr.zopen(FSSpec.FSStore("s3://its-live-data/datacubes/v2/N00E020/ITS_LIVE_vel_EPSG32735_G0120_X750000_Y10050000.zarr"), consolidated = true))
+py_array = ARRAYS["PyYAXArrays"] = YAXArrays.open_dataset(xr.open_zarr(data_url, decode_times=false))
+
+fs_array = ARRAYS["FSSpec"] = YAXArrays.open_dataset(Zarr.zopen(FSSpec.FSStore("s3://its-live-data/datacubes/v2/N00E020/ITS_LIVE_vel_EPSG32735_G0120_X750000_Y10050000.zarr"), consolidated = true))
+
+ARRAYS["xarray"] = xr.open_zarr(data_url, decode_times=false)
+
+ARRAYS["Python"] = "" # just so we have the key
 
 # Load a chunk
 # Load 100 contiguous chunks
@@ -32,15 +41,21 @@ fs_array = YAXArrays.open_dataset(Zarr.zopen(FSSpec.FSStore("s3://its-live-data/
 # This function has to do the benchmarking internally, because chunk structures can change across different arrays and chunking structures.
 function benchmark_single_chunk_read(A)
     chunk_idxs = first(DiskArrays.eachchunk(A))
+    benchmark_single_chunk_read(A, chunk_idxs)
+end
+
+function benchmark_single_chunk_read(A, chunk_idxs)
     aout = zeros(Union{Missing, Float64}, chunk_idxs...)
     @benchmark DiskArrays.readblock!(parent($A #=A must be a YAXArray for this to work=#), $aout, $(chunk_idxs)...)
 end
 
+benchmark_single_chunk_read(A::Py) = @benchmark $(A)[0:$(pyconvert(Int, A.chunks[2][0])),  0:$(pyconvert(Int, A.chunks[1][0])), 0:$(pyconvert(Int, A.chunks[0][0]))].load()
+
 SUITE["single chunk read"]["YAXArrays"] = benchmark_single_chunk_read(yax_array["v"])
 SUITE["single chunk read"]["PyYAXArrays"] = benchmark_single_chunk_read(py_array["v"])
 SUITE["single chunk read"]["FSSpec"] = benchmark_single_chunk_read(fs_array["v"])
+SUITE["single chunk read"]["xarray"] = benchmark_single_chunk_read(ARRAYS["xarray"]["v"])
 
-# Load 100 contiguous chunks.  For the MUR SST data, we'll do this by loading 
 
 function load_spatial_contiguous_chunks!(array, out)
     out .= array[:, :, 1]
@@ -118,3 +133,71 @@ end
 
 load_python_benchmark_suite!("python.json")
 
+
+
+
+# Visualize the results
+
+_NAME_COLOR_MAP = Dict(
+    "YAXArrays" => Makie.ColorSchemes.seaborn_colorblind[1],
+    "PyYAXArrays" => Makie.ColorSchemes.seaborn_colorblind[2],
+    "FSSpec" => Makie.ColorSchemes.seaborn_colorblind[3],
+    "xarray" => Makie.ColorSchemes.seaborn_colorblind[4],
+    "Python" => Makie.ColorSchemes.seaborn_colorblind[5],
+)
+
+_NAME_MARKER_MAP = Dict(
+    "YAXArrays" => ('Y', Makie.findfont("Copperplate Bold")),
+    "PyYAXArrays" => ('P', Makie.findfont("Copperplate")),
+    "FSSpec" => ('F', Makie.findfont("Copperplate")),
+    "xarray" => ('X', Makie.findfont("Copperplate")),
+    "Python" => ('🐍', Makie.findfont("Noto Emoji")), #(#='𓆚'=#'𓆗',  Makie.findfont("Noto Sans Egyptian Hieroglyphs Bold")),
+)
+
+leaf_nodes = BenchmarkTools.leaves(SUITE)
+
+using DataFrames
+df = DataFrame()
+
+df.scenarios = (x -> getindex(first(x), 1)).(leaf_nodes)
+df.array_types = (x -> getindex(first(x), 2)).(leaf_nodes)
+df.median_times = (x -> median(x[2]).time).(leaf_nodes)
+
+# normalize times to YAX timing
+gdf = groupby(df, :scenarios)
+# Iterate over each group and add a normalized_times column.
+# Since groupeddataframe is a view, this also mutates the original dataframe.
+for sdf in gdf
+    yax_idx = findfirst(==("YAXArrays"), sdf.array_types)
+    sdf.normalized_times = sdf.median_times ./ sdf.median_times[yax_idx]
+end
+
+df # check this out!!!
+
+
+f, a, p = beeswarm(
+    Categorical(df.scenarios),
+    df.normalized_times;
+    color = getindex.((_NAME_COLOR_MAP,), df.array_types),
+    marker = getindex.((_NAME_MARKER_MAP,), df.array_types),
+    markersize = 15,
+    axis = (;
+        title = "Median Time per Operation",
+        ylabel = "Median time (relative to YAXArrays)",
+        xlabel = "Scenario",
+        xticklabelrotation = π/4,
+        yscale = log10,
+    ),
+)
+Makie.update_state_before_display!(f)
+Makie.tight_ticklabel_spacing!(a)
+f
+
+
+leg = Legend(
+    f[1, 2],
+    [MarkerElement(color = _NAME_COLOR_MAP[at], marker = _NAME_MARKER_MAP[at], markersize = p.markersize) for at in keys(ARRAYS)],
+    collect(keys(ARRAYS)),
+    "Array Type",
+)
+f
